@@ -10,10 +10,11 @@ A high-performance, real-time violence detection system designed for university 
 
 ## 🚀 Key Features
 
-*   **⚡ Multi-Camera Dashboard:** Simulate a control room with side-by-side feeds and a integrated alert history panel.
+*   **⚡ Multi-Camera Dashboard:** Simulate a control room with side-by-side feeds and an integrated alert history panel.
 *   **🧠 High Accuracy:** Trained on real-world datasets achieving **91.7% validation accuracy**.
-*   **🌊 Optical Flow suppression:** Intelligent motion filtering that reduces false positives by 30% when motion is static.
-*   **🍎 Apple Silicon Native:** Built with `torch.device("mps")` for GPU accelerated inference on Mac.
+*   **🎯 Trained Weights:** Automatically loads `violence_classifier.pt` on startup — no random weights.
+*   **🌊 Optical Flow Suppression:** Intelligent motion filtering that reduces false positives when the scene is static.
+*   **🍎 Apple Silicon Native:** Built with `torch.device("mps")` for GPU-accelerated inference on Mac.
 *   **📝 Structured Alerting:** Auto-logs alerts with timestamps, confidence scores, and duration into `alerts.jsonl`.
 *   **🏗️ Training Pipeline:** Includes a complete script to download datasets and train the LSTM from scratch.
 
@@ -26,14 +27,45 @@ The system operates in a dual-stage pipeline:
 1.  **Spatial Stage (YOLOv8):** Detects humans in the frame and crops the Region of Interest (ROI).
 2.  **Temporal Stage (MobileNetV2 + LSTM):** Takes a 16-frame sequence of the ROI to classify the behavior as "Violent" or "Normal".
 
+```
+Camera Feed → YOLOv8 (Person Detection) → ROI Crop
+                                              ↓
+                               16-Frame Buffer (112×112)
+                                              ↓
+                          MobileNetV2 (Feature Extraction)
+                                              ↓
+                              2-Layer LSTM (Temporal Reasoning)
+                                              ↓
+                         Optical Flow Suppression (Motion Gate)
+                                              ↓
+                          Violence Score → Alert if score > 0.55
+```
+
+---
+
+## ⚙️ Detection Parameters
+
+These parameters control detection sensitivity and can be tuned in `main.py` and `multicam.py`:
+
+| Parameter | Value | Description |
+|---|---|---|
+| `VIOLENCE_THRESHOLD` | `0.55` | Score above which an alert is triggered. Lowered from 0.75 to catch self-hitting and mild violence. |
+| `MOTION_THRESHOLD` | `0.35` | Optical flow magnitude below which the scene is considered "still". Lowered so moderate motion (self-hitting) isn't suppressed. |
+| `MOTION_SUPPRESS` | `0.85` | Score multiplier when motion is below threshold. Eased from 0.70 to reduce over-suppression. |
+| `YOLO_CONFIDENCE` | `0.40` | Minimum YOLO confidence to detect a person. Lowered to catch partially visible persons. |
+| `FRAME_BUFFER_SIZE` | `16` | Number of frames fed into the LSTM for each inference pass (~0.5s at 30fps). |
+| `ALERT_COOLDOWN` | `10s` | Minimum seconds between repeated alerts for the same camera. |
+
+> **Tuning tip:** If you're getting too many false positives, raise `VIOLENCE_THRESHOLD` toward `0.65`. If violence is being missed, lower it toward `0.45`.
+
 ---
 
 ## 📥 Installation
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/JapjeetSingh17/AI-Driven-Real-time-violence-detection-model.git
-    cd AI-Driven-Real-time-violence-detection-model
+    git clone https://github.com/JapjeetSingh17/Vi-SAFE-Inspired--Real-Time-AI-Violence-Detection-System..git
+    cd Vi-SAFE-Inspired--Real-Time-AI-Violence-Detection-System.
     ```
 
 2.  **Create a virtual environment:**
@@ -58,7 +90,7 @@ python multicam.py
 ```
 
 ### Standard Single Feed
-Launch the primary detection system:
+Launch the primary detection system (with live score debug output in terminal):
 ```bash
 python main.py
 ```
@@ -68,21 +100,25 @@ To retrain the model on the latest datasets:
 ```bash
 python train.py --epochs 75
 ```
+The best checkpoint is saved as `violence_classifier_trained.pt` and copied to `violence_classifier.pt` automatically.
 
 ---
 
 ## 📊 Performance & Alerts
 
-Alerts are triggered when the violence score exceeds **0.75**. Every alert records:
+Alerts are triggered when the violence score exceeds **0.55** (after optional motion suppression). Every alert records:
+
 *   `timestamp`: When the event occurred.
 *   `location`: Camera identifier.
-*   `confidence`: Model probability score.
-*   `duration`: Duration of the detected event.
+*   `confidence`: Model probability score (0.0 – 1.0).
+*   `duration_seconds`: How long the violence has been detected.
 
 Sample `alerts.jsonl`:
 ```json
-{"timestamp": "2026-04-20 16:30:00", "location": "Library - Floor 2", "confidence": 0.892, "duration_seconds": 4.1}
+{"timestamp": "2026-04-20 16:30:00", "location": "Library - Floor 2", "confidence": 0.612, "duration_seconds": 3.2}
 ```
+
+Alerts are also written as plain text to `alerts.log` for backward compatibility.
 
 ---
 
