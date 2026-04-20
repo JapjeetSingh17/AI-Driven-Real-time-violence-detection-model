@@ -172,7 +172,6 @@ while True:
         violence_score = raw_score
 
         # Task 4 — Track how long score has been above threshold
-        global violence_start_t
         if violence_score > VIOLENCE_THRESHOLD:
             if violence_start_t is None:
                 violence_start_t = time.time()
